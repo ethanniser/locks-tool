@@ -159,10 +159,10 @@ class PersistedCache implements Cache {
     synonyms: Record<string, string[]>;
   };
   constructor(private path: string) {
-    try {
+    if (fs.existsSync("./cache.json")) {
       const contents = fs.readFileSync(this.path, "utf-8");
       this.cache = JSON.parse(contents);
-    } catch {
+    } else {
       this.cache = {
         store: {},
         synonyms: {},
@@ -213,6 +213,13 @@ class PersistedCache implements Cache {
 }
 
 async function main() {
+  const argv = process.argv.slice(2);
+  if (argv.includes("--clean")) {
+    if (fs.existsSync("./cache.json")) {
+      fs.unlinkSync("./cache.json");
+    }
+  }
+
   const master = new LoaderOne("./data/Sheet1.csv");
   const remote = new LoaderTwo("./data/Sheet2.csv");
   const cache = new PersistedCache("./cache.json");
