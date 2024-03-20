@@ -1,5 +1,33 @@
 import fs from "node:fs";
 
+import * as readline from "readline";
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+function askQuestionBoolean(question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      const trimmedAnswer = answer.trim().toLowerCase();
+      if (trimmedAnswer === "y" || trimmedAnswer === "yes") {
+        resolve(true);
+      } else if (trimmedAnswer === "n" || trimmedAnswer === "no") {
+        resolve(false);
+      } else if (trimmedAnswer === "q" || trimmedAnswer === "quit") {
+        console.log("Exiting...");
+        process.exit(0);
+      } else {
+        console.log(
+          "Invalid response. Please answer with 'y', 'n', 'q' or 'quit'."
+        );
+        resolve(askQuestionBoolean(question));
+      }
+    });
+  });
+}
+
 type Game = {
   month: number;
   day: number;
@@ -12,33 +40,60 @@ interface Loader {
   getGames(): Game[];
 }
 
-function compareAll(master: Loader, remote: Loader) {
+interface Cache {
+  get(a: string, b: string): boolean | undefined;
+  set(a: string, b: string, value: boolean): void;
+}
+
+async function compareAll(
+  master: Loader,
+  remote: Loader,
+  cache: Cache
+): Promise<Game[]> {
   const masterGames = master.getGames();
   const remoteGames = remote.getGames();
 
+  const missingGames: Game[] = [];
+
   for (const remoteGame of remoteGames) {
     for (const masterGame of masterGames) {
-      if (compare(masterGame, remoteGame)) {
+      if (await compare(masterGame, remoteGame, cache)) {
         continue;
       }
     }
 
-    console.error("Game not found in master", remoteGame);
+    missingGames.push(remoteGame);
   }
+
+  return missingGames;
 }
 
-function compare(a: Game, b: Game): boolean {
+async function compare(a: Game, b: Game, cache: Cache): Promise<boolean> {
+  const locationMatch = await compareLocation(a.location, b.location, cache);
   return (
+    locationMatch &&
     a.month === b.month &&
     a.day === b.day &&
     a.time === b.time &&
-    a.age === b.age &&
-    compareLocation(a.location, b.location)
+    a.age === b.age
   );
 }
 
-function compareLocation(a: string, b: string): boolean {
-  return a === b;
+async function compareLocation(
+  a: string,
+  b: string,
+  cache: Cache
+): Promise<boolean> {
+  const cached = cache.get(a, b);
+  if (cached !== undefined) {
+    return cached;
+  } else {
+    const result = await askQuestionBoolean(
+      `Are these locations the same? "${a}" and "${b}" (y/n/q): `
+    );
+    cache.set(a, b, result);
+    return result;
+  }
 }
 
 class LoaderOne implements Loader {
@@ -98,11 +153,80 @@ class LoaderTwo implements Loader {
   }
 }
 
-function main() {
+class PersistedCache implements Cache {
+  private cache: {
+    store: Record<string, boolean>;
+    synonyms: Record<string, string[]>;
+  };
+  constructor(private path: string) {
+    try {
+      const contents = fs.readFileSync(this.path, "utf-8");
+      this.cache = JSON.parse(contents);
+    } catch {
+      this.cache = {
+        store: {},
+        synonyms: {},
+      };
+    }
+  }
+
+  public get(a: string, b: string): boolean | undefined {
+    const allASynonyms = (this.cache.synonyms[a] || []).concat(a);
+    const allBSynonyms = (this.cache.synonyms[b] || []).concat(b);
+    for (const aSynonym of allASynonyms) {
+      for (const bSynonym of allBSynonyms) {
+        const key = this.hash(aSynonym, bSynonym);
+        if (this.cache.store[key] !== undefined) {
+          return this.cache.store[key];
+        }
+      }
+    }
+    return undefined;
+  }
+
+  public set(a: string, b: string, value: boolean): void {
+    const key = this.hash(a, b);
+    this.cache.store[key] = value;
+
+    if (value) {
+      const aSynonyms = this.cache.synonyms[a];
+      if (aSynonyms === undefined) {
+        this.cache.synonyms[a] = [b];
+      } else {
+        aSynonyms.push(b);
+      }
+
+      const bSynonyms = this.cache.synonyms[b];
+      if (bSynonyms === undefined) {
+        this.cache.synonyms[b] = [a];
+      } else {
+        bSynonyms.push(a);
+      }
+    }
+
+    fs.writeFileSync(this.path, JSON.stringify(this.cache));
+  }
+
+  private hash(a: string, b: string): string {
+    return a < b ? `${a}:${b}` : `${b}:${a}`;
+  }
+}
+
+async function main() {
   const master = new LoaderOne("./data/Sheet1.csv");
   const remote = new LoaderTwo("./data/Sheet2.csv");
+  const cache = new PersistedCache("./cache.json");
 
-  compareAll(master, remote);
+  const missingGames = await compareAll(master, remote, cache);
+
+  for (const game of missingGames) {
+    console.log(
+      `Missing game: ${game.month}/${game.day} at ${game.time} in ${game.location}`
+    );
+  }
+
+  rl.close();
+  process.exit(0);
 }
 
 main();
