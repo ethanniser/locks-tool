@@ -236,4 +236,36 @@ async function main() {
   process.exit(0);
 }
 
-main();
+// main();
+
+class AggregateLoader implements Loader {
+  constructor(private path: string) {}
+  getGames(): Game[] {
+    const contents = fs.readFileSync(this.path, "utf-8");
+    return contents
+      .trim()
+      .split("\n")
+      .map((line) => line.split(","))
+      .map(([date, location, rawTime, rawAge]) => {
+        const stringDate = date.split(" ")[0];
+        const parts = stringDate.split("-");
+        const month = Number(parts[1]);
+        const day = Number(parts[2]);
+
+        const timeParts = rawTime.split(":");
+        const time = Number(timeParts[0] + timeParts[1]);
+        const age = parseInt(rawAge.split("u")[0]);
+
+        return {
+          age,
+          day,
+          location,
+          month,
+          time,
+        };
+      });
+  }
+}
+
+const aggregate = new AggregateLoader("./data/josh aggregate.csv");
+console.log(aggregate.getGames());
