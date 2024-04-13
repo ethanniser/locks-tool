@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import * as readline from "readline";
-import { AggregateLoader, OzLoader, WellsLoader } from "./loaders";
+import { AggregateLoader, HawksLoader, OzLoader, WellsLoader } from "./loaders";
 import { PersistedCache } from "./cache";
+import levenshtein from "fast-levenshtein";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -62,10 +63,14 @@ async function compareAll(
 
   const missingGames: Game[] = [];
 
-  for (const remoteGame of remoteGames) {
+  outer: for (const remoteGame of remoteGames) {
     for (const masterGame of masterGames) {
-      if (await compare(masterGame, remoteGame, cache)) {
-        continue;
+      const match = await compare(masterGame, remoteGame, cache);
+      if (!match) {
+        console.log(remoteGame, masterGame);
+      }
+      if (match) {
+        continue outer;
       }
     }
 
@@ -81,7 +86,9 @@ async function compare(a: Game, b: Game, cache: Cache): Promise<boolean> {
     locationMatch &&
     a.month === b.month &&
     a.day === b.day &&
-    a.time === b.time &&
+    a.time.hour === b.time.hour &&
+    a.time.minute === b.time.minute &&
+    a.time.ampm === b.time.ampm &&
     a.age === b.age
   );
 }
@@ -95,11 +102,19 @@ async function compareLocation(
   if (cached !== undefined) {
     return cached;
   } else {
-    const result = await askQuestionBoolean(
-      `Are these locations the same? "${a}" and "${b}" (y/n/q): `
-    );
-    cache.set(a, b, result);
-    return result;
+    const threshold = 5;
+    const distance = levenshtein.get(a, b);
+    if (distance > threshold) {
+      cache.set(a, b, false);
+      return false;
+    } else {
+      // they are close enough, ask the user
+      const result = await askQuestionBoolean(
+        `Are these locations the same? "${a}" and "${b}" (y/n/q): `
+      );
+      cache.set(a, b, result);
+      return result;
+    }
   }
 }
 
@@ -112,16 +127,20 @@ async function main() {
   }
 
   const master = new AggregateLoader("./data/josh aggregate.csv");
-  const remote = new OzLoader("./data/oz.csv");
+  const remote = new HawksLoader("./data/hawks.csv");
   const cache = new PersistedCache("./cache.json");
 
   const missingGames = await compareAll(master, remote, cache);
 
+  console.log("--- THERE MAY BE FALSE POSITIVES ---");
   for (const game of missingGames) {
     console.log(
-      `Missing game: ${game.month}/${game.day} at ${game.time.hour}:${game.time.minute} ${game.time.ampm} in ${game.location}`
+      `Missing game: ${game.month}/${game.day} at ${game.time.hour}:${
+        game.time.minute === 0 ? "00" : game.time.minute
+      } ${game.time.ampm} in ${game.location}`
     );
   }
+  console.log("--- THERE MAY BE FALSE POSITIVES ---");
 
   rl.close();
   process.exit(0);
