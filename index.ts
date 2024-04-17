@@ -93,7 +93,9 @@ async function compare(
   b: Game,
   cache: Cache
 ): Promise<[result: boolean, message: string]> {
+  // console.log(a, b);
   const locationMatch = await compareLocation(a.location, b.location, cache);
+  // console.log(locationMatch);
   let timeMatch = false;
   let message = "";
   if (a.time.hour === b.time.hour && a.time.minute === b.time.minute) {
@@ -131,12 +133,11 @@ async function compareLocation(
   cache: Cache
 ): Promise<boolean> {
   const cached = cache.get(a, b);
+  // console.log(`Comparing locations: "${a}" and "${b}" - cached: ${cached}`);
   if (cached !== undefined) {
     return cached;
   } else {
-    const threshold = 5;
-    const distance = levenshtein.get(a, b);
-    if (distance > threshold) {
+    if (!areSimilar(a, b)) {
       cache.set(a, b, false);
       return false;
     } else {
@@ -150,6 +151,24 @@ async function compareLocation(
   }
 }
 
+function areSimilar(a: string, b: string): boolean {
+  const normalizedA = normalizeString(a);
+  const normalizedB = normalizeString(b);
+  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) {
+    return true;
+  }
+  const distance = levenshtein.get(normalizedA, normalizedB);
+  const threshold = Math.max(normalizedA.length, normalizedB.length) * 0.2; // 20% of the length of the longer string
+  // console.log(
+  //   `Distance between ${normalizedA} and ${normalizedB}: ${distance} (threshold: ${threshold})`
+  // );
+  return distance <= threshold;
+}
+
+function normalizeString(input: string): string {
+  return input.toLowerCase().trim();
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--clean")) {
@@ -159,16 +178,20 @@ async function main() {
   }
 
   const master = new AggregateLoader("./data/josh aggregate.csv");
-  const remote = new HawksLoader("./data/hawks.csv");
+  const remote = new WellsLoader("./data/welles .csv");
   const cache = new PersistedCache("./cache.json");
 
   const missingGames = await compareAll(master, remote, cache);
 
-  console.log("--- THERE MAY BE FALSE POSITIVES ---");
-  for (const game of missingGames) {
-    console.log(`Missing game: ${formatGame(game)}`);
+  if (missingGames.length > 0) {
+    console.log("--- THERE MAY BE FALSE POSITIVES ---");
+    for (const game of missingGames) {
+      console.log(`Missing game: ${formatGame(game)}`);
+    }
+    console.log("--- THERE MAY BE FALSE POSITIVES ---");
+  } else {
+    console.log("No missing games found!");
   }
-  console.log("--- THERE MAY BE FALSE POSITIVES ---");
 
   rl.close();
   process.exit(0);
