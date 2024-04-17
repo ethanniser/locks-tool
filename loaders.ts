@@ -227,3 +227,67 @@ export class HawksLoader implements Loader {
     throw new Error(`Unsupported time format: ${time}`);
   }
 }
+
+export class WindyCityLoader implements Loader {
+  constructor(private path: string) {}
+  getGames(): Game[] {
+    const contents = fs.readFileSync(this.path, "utf-8");
+    return contents
+      .trim()
+      .split("\n")
+      .slice(1)
+      .map((line) => line.split(","))
+      .filter(([_]) => _ !== "")
+      .map(([rawDate, rawTime, rawLocation, rawAge]) => {
+        const age = this.parseAge(rawAge);
+        const { month, day } = this.parseDate(rawDate);
+        const time = this.parseTime(rawTime);
+
+        return {
+          age,
+          day,
+          location: rawLocation,
+          month,
+          time,
+        };
+      });
+  }
+
+  private parseAge(age: string): number {
+    return parseInt(age.split("u")[0]);
+  }
+  private parseDate(date: string): { month: number; day: number } {
+    const [year, month, day] = date.split("-").map(Number);
+    return { month, day };
+  }
+  private parseTime(time: string): Time {
+    // Regular expressions to match various time formats
+    const simpleTime = /^(?<hour>[0-9]{1,2})(?<minute>[0-9]{2})?$/; // Matches "530" or "8"
+    const detailedTime = /^(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):[0-9]{2}$/; // Matches "05:30:00"
+
+    let match = time.match(simpleTime);
+    if (match) {
+      let hour = parseInt(match.groups!.hour);
+      let minute = match.groups!.minute ? parseInt(match.groups!.minute) : 0;
+      return {
+        hour: hour > 12 ? hour % 12 : hour,
+        minute: minute,
+        ampm: hour >= 12 ? "PM" : "AM",
+      };
+    }
+
+    match = time.match(detailedTime);
+    if (match) {
+      let hour = parseInt(match.groups!.hour);
+      let minute = parseInt(match.groups!.minute);
+      return {
+        hour: hour > 12 ? hour % 12 : hour,
+        minute: minute,
+        ampm: hour >= 12 ? "PM" : "AM",
+      };
+    }
+
+    throw new Error(`Unsupported time format: ${time}`);
+  }
+}
+     
