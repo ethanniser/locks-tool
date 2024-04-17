@@ -62,7 +62,7 @@ export class AggregateLoader implements Loader {
       return {
         hour: hour > 12 ? hour % 12 : hour,
         minute: minute,
-        ampm: "PM",
+        ampm: null,
       };
     }
 
@@ -209,7 +209,7 @@ export class HawksLoader implements Loader {
       return {
         hour: hour > 12 ? hour % 12 : hour,
         minute: minute,
-        ampm: "PM",
+        ampm: null,
       };
     }
 

@@ -33,7 +33,7 @@ function askQuestionBoolean(question: string): Promise<boolean> {
 export type Time = {
   hour: number;
   minute: number;
-  ampm: "AM" | "PM";
+  ampm: "AM" | "PM" | null;
 };
 
 export type Game = {
@@ -53,6 +53,14 @@ export interface Cache {
   set(a: string, b: string, value: boolean): void;
 }
 
+function formatGame(game: Game): string {
+  return `${game.month}/${game.day} at ${game.time.hour}:${
+    game.time.minute === 0 ? "00" : game.time.minute
+  }${game.time.ampm !== null ? ` ${game.time.ampm}` : ""} in ${
+    game.location
+  } - ${game.age}u`;
+}
+
 async function compareAll(
   master: Loader,
   remote: Loader,
@@ -66,10 +74,10 @@ async function compareAll(
   outer: for (const remoteGame of remoteGames) {
     for (const masterGame of masterGames) {
       const match = await compare(masterGame, remoteGame, cache);
-      if (!match) {
-        console.log(remoteGame, masterGame);
-      }
-      if (match) {
+      if (match[0]) {
+        if (match[1] !== "") {
+          console.error(match[1]);
+        }
         continue outer;
       }
     }
@@ -80,17 +88,41 @@ async function compareAll(
   return missingGames;
 }
 
-async function compare(a: Game, b: Game, cache: Cache): Promise<boolean> {
+async function compare(
+  a: Game,
+  b: Game,
+  cache: Cache
+): Promise<[result: boolean, message: string]> {
   const locationMatch = await compareLocation(a.location, b.location, cache);
-  return (
+  let timeMatch = false;
+  let message = "";
+  if (a.time.hour === b.time.hour && a.time.minute === b.time.minute) {
+    if (a.time.ampm === b.time.ampm) {
+      timeMatch = true;
+    } else {
+      if (a.time.ampm === null) {
+        message = `GAME: ${formatGame(
+          a
+        )} does not specify AM/PM - MANUAL CHECK REQUIRED`;
+
+        timeMatch = true;
+      } else if (b.time.ampm === null) {
+        message = `GAME: ${formatGame(
+          b
+        )} does not specify AM/PM - MANUAL CHECK REQUIRED`;
+
+        timeMatch = true;
+      }
+    }
+  }
+  return [
     locationMatch &&
-    a.month === b.month &&
-    a.day === b.day &&
-    a.time.hour === b.time.hour &&
-    a.time.minute === b.time.minute &&
-    a.time.ampm === b.time.ampm &&
-    a.age === b.age
-  );
+      timeMatch &&
+      a.month === b.month &&
+      a.day === b.day &&
+      a.age === b.age,
+    message,
+  ];
 }
 
 async function compareLocation(
@@ -134,11 +166,7 @@ async function main() {
 
   console.log("--- THERE MAY BE FALSE POSITIVES ---");
   for (const game of missingGames) {
-    console.log(
-      `Missing game: ${game.month}/${game.day} at ${game.time.hour}:${
-        game.time.minute === 0 ? "00" : game.time.minute
-      } ${game.time.ampm} in ${game.location}`
-    );
+    console.log(`Missing game: ${formatGame(game)}`);
   }
   console.log("--- THERE MAY BE FALSE POSITIVES ---");
 
