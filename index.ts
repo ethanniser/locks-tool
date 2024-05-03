@@ -99,7 +99,6 @@ class Game
   }
 }
 
-// format: 4/23/2024
 const DateFromString = S.transform(
   S.String,
   S.Struct({
@@ -109,7 +108,17 @@ const DateFromString = S.transform(
   }),
   {
     decode: (s) => {
-      const [month, day, year] = s.split("/").map(Number);
+      // const [month, day, year] = s.split("/").map(Number);
+      let month: number, day: number, year: number;
+      if (s.includes("/")) {
+        // format: 4/23/2024
+        [month, day, year] = s.split("/").map(Number);
+      } else if (s.includes("-")) {
+        // format: 2024-06-30
+        [year, month, day] = s.split("-").map(Number);
+      } else {
+        throw new Error("Invalid date format: " + s);
+      }
       return { year, month, day };
     },
     encode: (date) => `${date.month}/${date.day}/${date.year}`,
@@ -241,7 +250,12 @@ const readGamesFromFile = (
     const rawString = yield* fs.readFileString(path);
     const string = normalizeString(rawString);
     const rawGames = yield* Effect.try({
-      try: () => parse(string, { columns: true, quote: '"' }) as unknown,
+      try: () =>
+        parse(string, {
+          columns: true,
+          quote: '"',
+          relax_column_count: true,
+        }) as unknown,
       catch: (e) => {
         if (!(e instanceof CsvError)) {
           throw e;
@@ -249,6 +263,7 @@ const readGamesFromFile = (
         return new CsvParseError({ error: e, file: path });
       },
     });
+
     const games = yield* S.decodeUnknown(S.Array(RowToGame))(rawGames);
     return games;
   });
@@ -439,7 +454,8 @@ Effect.suspend(() => cli(process.argv)).pipe(
   Effect.catchTag("CsvParseError", (e) =>
     Console.error(
       `There was an error parsing the CSV file '${e.file}':\n`,
-      e.error.message
+      e.error.message,
+      e.error.code
     )
   ),
   Effect.provide(BunContext.layer),
