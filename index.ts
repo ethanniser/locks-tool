@@ -356,7 +356,29 @@ const compareGames = (
     return counter;
   });
 
-const fileArg = Args.file({ name: "file", exists: "yes" }).pipe(
+class PathDoesNotExistError extends Data.TaggedError("PathDoesNotExistError")<{
+  readonly path: string;
+}> {}
+
+const normalizeRelativePath = (path: string) =>
+  Effect.gen(function* (_) {
+    const p = yield* Path.Path;
+    let finalPath: string;
+    if (!p.isAbsolute(path)) {
+      finalPath = p.join(process.cwd(), path);
+    } else {
+      finalPath = path;
+    }
+
+    const fs = yield* FileSystem.FileSystem;
+    if (!fs.exists(finalPath)) {
+      yield* new PathDoesNotExistError({ path: finalPath });
+    }
+
+    return finalPath;
+  });
+
+const fileArg = Args.file({ name: "file", exists: "either" }).pipe(
   Args.withDescription("Path to a file containing games data")
 );
 const outArg = Options.file("output", { exists: "either" }).pipe(
@@ -374,6 +396,8 @@ const mergeCommand = Command.make(
   },
   ({ fileOne, fileTwo, outPath }) =>
     Effect.gen(function* () {
+      fileOne = yield* normalizeRelativePath(fileOne);
+      fileTwo = yield* normalizeRelativePath(fileTwo);
       const file_one_games = yield* readGamesFromFile(fileOne);
       const file_two_games = yield* readGamesFromFile(fileTwo);
 
@@ -383,14 +407,14 @@ const mergeCommand = Command.make(
     })
 );
 
-const localOptions = Options.file("local", { exists: "yes" }).pipe(
+const localOptions = Options.file("local", { exists: "either" }).pipe(
   Options.withDescription(
     "Path to the local file (the one to be compared against)"
   ),
   Options.withAlias("m")
 );
 
-const remoteOption = Options.file("remote", { exists: "yes" }).pipe(
+const remoteOption = Options.file("remote", { exists: "either" }).pipe(
   Options.withDescription(
     "Path to the remote file (the one that was generated)"
   ),
@@ -405,6 +429,8 @@ const compareCommand = Command.make(
   },
   ({ localFilePath, remoteFilePath }) =>
     Effect.gen(function* () {
+      localFilePath = yield* normalizeRelativePath(localFilePath);
+      remoteFilePath = yield* normalizeRelativePath(remoteFilePath);
       const localGames = yield* readGamesFromFile(localFilePath);
       const remoteGames = yield* readGamesFromFile(remoteFilePath);
 
@@ -457,6 +483,9 @@ Effect.suspend(() => cli(process.argv)).pipe(
       e.error.message,
       e.error.code
     )
+  ),
+  Effect.catchTag("PathDoesNotExistError", (e) =>
+    Console.error(`The path '${e.path}' does not exist.`)
   ),
   Effect.provide(BunContext.layer),
   BunRuntime.runMain

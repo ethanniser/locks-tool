@@ -8,5 +8,7 @@ cd /d "%~dp0"
 cd ..
 git pull
 
+bun i
+
 :: Return to the original directory
 cd /d "%original_dir%"
