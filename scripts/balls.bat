@@ -12,4 +12,4 @@
 :: Return to the original directory
 :: cd /d "%original_dir%"
 
-bun run 'C:\Users\school\Desktop\locks-tool\index.ts' %*
+bun run C:\Users\school\Desktop\locks-tool\index.ts %*
