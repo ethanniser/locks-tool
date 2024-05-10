@@ -352,7 +352,6 @@ const compareGames = (
         counter++;
       }
     }
-
     return counter;
   });
 
@@ -402,7 +401,8 @@ const mergeCommand = Command.make(
       const file_two_games = yield* readGamesFromFile(fileTwo);
 
       const allGames = [...file_one_games, ...file_two_games];
-      yield* writeGamesToFile(outPath, allGames);
+      const dedupedGames = Array.dedupe(allGames);
+      yield * writeGamesToFile(outPath, dedupedGames);
       yield* Console.log("Merged games written to: ", outPath);
     })
 );
@@ -411,14 +411,14 @@ const localOptions = Options.file("local", { exists: "either" }).pipe(
   Options.withDescription(
     "Path to the local file (the one to be compared against)"
   ),
-  Options.withAlias("m")
+  Options.withAlias("l")
 );
 
 const remoteOption = Options.file("remote", { exists: "either" }).pipe(
   Options.withDescription(
     "Path to the remote file (the one that was generated)"
   ),
-  Options.withAlias("n")
+  Options.withAlias("r")
 );
 
 const compareCommand = Command.make(
