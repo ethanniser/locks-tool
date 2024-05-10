@@ -34,25 +34,21 @@ class Game
   })
   implements Equal.Equal, Hash.Hash
 {
-  // best score is 8
+  // best score is 4
   static compare(a: Game, b: Game): number {
     let i = 0;
-    if (a.date.year === b.date.year) {
+    if (
+      a.date.year === b.date.year &&
+      a.date.month === b.date.month &&
+      a.date.day === b.date.day
+    ) {
       i++;
     }
-    if (a.date.month === b.date.month) {
-      i++;
-    }
-    if (a.date.day === b.date.day) {
-      i++;
-    }
-    if (a.time.hour === b.time.hour) {
-      i++;
-    }
-    if (a.time.minute === b.time.minute) {
-      i++;
-    }
-    if (a.time.ampm === b.time.ampm) {
+    if (
+      a.time.hour === b.time.hour &&
+      a.time.minute === b.time.minute &&
+      a.time.ampm === b.time.ampm
+    ) {
       i++;
     }
     if (a.venue === b.venue) {
@@ -312,7 +308,7 @@ const handleUnmatchedGame = (
       (game) => [Game.compare(unamtchedGame, game), game] as const
     );
     const sortedScores = scores.sort(([a], [b]) => b - a);
-    const topMatches = sortedScores.slice(0, 3).filter(([score]) => score > 5);
+    const topMatches = sortedScores.slice(0, 3).filter(([score]) => score > 2);
 
     const message =
       sourceOfTruth === "local"
@@ -327,7 +323,7 @@ const handleUnmatchedGame = (
         } found:`
       );
       for (const [score, game] of topMatches) {
-        console.log(`Items Different: ${8 - score} - ${game.prettyPrint()}`);
+        console.log(`Items Different: ${4 - score} - ${game.prettyPrint()}`);
       }
     } else {
       console.log("No close matches found.");
@@ -402,7 +398,7 @@ const mergeCommand = Command.make(
 
       const allGames = [...file_one_games, ...file_two_games];
       const dedupedGames = Array.dedupe(allGames);
-      yield * writeGamesToFile(outPath, dedupedGames);
+      yield* writeGamesToFile(outPath, dedupedGames);
       yield* Console.log("Merged games written to: ", outPath);
     })
 );
